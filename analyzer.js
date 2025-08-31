@@ -1,6 +1,7 @@
-console.log("Using API key:", process.env.GROQ_API_KEY ? "Loaded" : "Missing");
 const axios = require('axios')
 const dotenv = require('dotenv')
+const pdfParse = require('pdf-parse')
+const mammoth = require('mammoth')
 dotenv.config()
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY
@@ -61,7 +62,35 @@ Recommendations: [list specific recommendations]`
     res.json({ result: smartAnalysis })
 }
 
+}
 
+async function fileUpload(req, res) {
+    try {
+        if (!req.file) {
+            return res.status(400).json({message: 'No file uploaded'})
+        }
+
+        const file = req.file
+        let extractedText = ''
+
+        if (file.mimetype === 'application/pdf') {
+            const pdfData = await pdfParse(file.buffer)
+            extractedText = pdfData.text
+        } 
+        else if (file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+            const docData = await mammoth.extractRawText({buffer: file.buffer})
+            extractedText = docData.value
+        }
+        else {
+            return res.status(400).json({message: 'Only PDF and DOCX files are supported'})
+        }
+
+        res.json({ text: extractedText })
+
+    } catch (error) {
+        console.log('File upload error:', error)
+        res.status(500).json({message: 'File processing failed'})
+ }
 }
 
 function createSmartAnalysis(jobDescription, resume) {
@@ -114,7 +143,96 @@ return commonSkills.filter(skill =>
     text.toLowerCase().includes(skill.toLowerCase())
 )
 
-
 }
 
-module.exports = {analyzer}
+async function analyzeFile(req, res) {
+    try {
+        const { jobDescription } = req.body
+        
+        if (!jobDescription) {
+            return res.status(400).json({message: 'Job Description is required'})
+        }
+
+        if (!req.file) {
+            return res.status(400).json({message: 'Resume file is required'})
+        }
+
+        // Extract text from file
+        const file = req.file
+        let resume = ''
+
+        if (file.mimetype === 'application/pdf') {
+            const pdfData = await pdfParse(file.buffer)
+            resume = pdfData.text
+        } 
+        else if (file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+            const docData = await mammoth.extractRawText({buffer: file.buffer})
+            resume = docData.value
+        }
+        else {
+            return res.status(400).json({message: 'Only PDF and DOCX files are supported'})
+        }
+
+        // Now analyze with AI
+        const prompt = `Analyze this resume against the job description:
+
+Job Description: ${jobDescription}
+
+Resume: ${resume}
+
+Provide analysis in this format:
+Match Percentage: [X]%
+Strengths: [list key strengths]
+Areas for improvement: [list areas to improve]  
+Recommendations: [list specific recommendations]`
+
+        const response = await axios.post(
+            'https://api.groq.com/openai/v1/chat/completions',
+            {
+                model: "llama-3.1-8b-instant",
+                messages: [
+                    {
+                        role: "user", 
+                        content: prompt
+                    }
+                ],
+                max_tokens: 500,
+                temperature: 0.7
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${GROQ_API_KEY}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        )
+
+        const aiText = response.data.choices[0].message.content
+        res.json({ result: aiText })
+
+    } catch (error) {
+        console.log('Analyze file error:', error.response?.data || error.message)
+        
+        // Smart fallback using extracted text
+        const { jobDescription } = req.body
+        let resume = ''
+        
+        try {
+            const file = req.file
+            if (file.mimetype === 'application/pdf') {
+                const pdfData = await pdfParse(file.buffer)
+                resume = pdfData.text
+            } else if (file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+                const docData = await mammoth.extractRawText({buffer: file.buffer})
+                resume = docData.value
+            }
+        } catch (extractError) {
+            console.log('Text extraction failed:', extractError)
+        }
+        
+        const smartAnalysis = createSmartAnalysis(jobDescription, resume)
+        res.json({ result: smartAnalysis })
+ }
+}
+
+module.exports = {analyzer, fileUpload, analyzeFile}
