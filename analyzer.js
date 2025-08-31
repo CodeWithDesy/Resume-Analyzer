@@ -1,3 +1,4 @@
+console.log("Using API key:", process.env.GROQ_API_KEY ? "Loaded" : "Missing");
 const axios = require('axios')
 const dotenv = require('dotenv')
 dotenv.config()
@@ -30,7 +31,7 @@ Recommendations: [list specific recommendations]`
     const response = await axios.post(
         'https://api.groq.com/openai/v1/chat/completions',
         {
-            model: "llama3-8b-8192",
+            model: "llama-3.1-8b-instant",
             messages: [
                 {
                     role: "user", 
