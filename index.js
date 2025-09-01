@@ -20,7 +20,7 @@ app.post('/analyze', analyzer)
 app.post('/upload', upload.single('file'), fileUpload)
 app.post('/analyze-file', upload.single('file'), analyzeFile)
 app.get("/", (req, res) => {
-  res.send("Resume Analyzer API is live! Use POST /analyze");
+  res.send("Resume Analyzer API is live! Use POST /analyze-file");
 });
 
 app.listen(PORT, () => {
