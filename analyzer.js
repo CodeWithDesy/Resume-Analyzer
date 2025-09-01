@@ -8,7 +8,14 @@ const GROQ_API_KEY = process.env.GROQ_API_KEY
 
 async function analyzer(req, res) {
 try {
-const { jobDescription, resume } = req.body
+    console.log('Request body:', req.body)
+        console.log('Request headers:', req.headers)
+        
+        // Check if req.body exists
+        if (!req.body) {
+            return res.status(400).json({message: 'Request body is missing'})
+    }
+ const { jobDescription, resume } = req.body
 
 
     if (!jobDescription || !resume) {
